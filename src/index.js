@@ -349,6 +349,32 @@ app.delete('/api/wallpaper', auth, async c => {
   return c.json({ url: '' });
 });
 
+// ---------- 页脚版权（文字 + 链接，可在后台自定义） ----------
+const FOOTER_DEFAULT = { text: 'Copyright © 2026  |   ', link_text: '龍哥博客', url: 'https://bk0.at8.ccwu.cc/' };
+const cleanFooter = v => {
+  v = v && typeof v === 'object' ? v : {};
+  const text = String(v.text == null ? '' : v.text).slice(0, 200);
+  const link_text = String(v.link_text == null ? '' : v.link_text).trim().slice(0, 100);
+  const url = String(v.url == null ? '' : v.url).trim();
+  if (url && (!/^https?:\/\//i.test(url) || url.length > 500 || /[\s"'<>\\]/.test(url))) return { error: '链接 URL 无效（需 http:// 或 https:// 开头，且不能含空格、引号、尖括号）' };
+  return { text, link_text, url };
+};
+async function getFooter(c) {
+  try { const r = await first(c, "SELECT value FROM settings WHERE key='footer'"); if (r && r.value) { const f = cleanFooter(JSON.parse(r.value)); if (!f.error) return f; } } catch (e) {}
+  return { ...FOOTER_DEFAULT };
+}
+app.get('/api/footer', async c => { c.header('Cache-Control', 'no-store'); return c.json(await getFooter(c)); });
+app.put('/api/footer', auth, async c => {
+  const f = cleanFooter(await body(c));
+  if (f.error) return c.json({ error: f.error }, 400);
+  await run(c, "INSERT INTO settings (key,value) VALUES ('footer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(f));
+  return c.json(f);
+});
+app.delete('/api/footer', auth, async c => {
+  await run(c, "DELETE FROM settings WHERE key='footer'");
+  return c.json({ ...FOOTER_DEFAULT });
+});
+
 // ---------- 书签导入导出 ----------
 const escapeHtml = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 function decodeEntities(s) {
@@ -664,7 +690,8 @@ async function buildBackup(c, { images = false } = {}) {
     friends: await all(c, 'SELECT id, title, url, logo FROM friends ORDER BY id')
   };
   const wp = await first(c, "SELECT value FROM settings WHERE key='wallpaper'");
-  const out = { type: 'nav-backup', version: 2, created_at: new Date().toISOString(), includes_images: !!images, tables, settings: { wallpaper: wp ? wp.value : null } };
+  const ft = await first(c, "SELECT value FROM settings WHERE key='footer'");
+  const out = { type: 'nav-backup', version: 2, created_at: new Date().toISOString(), includes_images: !!images, tables, settings: { wallpaper: wp ? wp.value : null, footer: ft ? ft.value : null } };
   if (images && c.env.KV) {
     const keys = new Set();
     const scan = s => { for (const m of String(s || '').matchAll(/\/uploads\/([A-Za-z0-9._-]{1,120})/g)) keys.add(m[1]); };
@@ -810,6 +837,12 @@ async function restoreBackup(c, data) {
     try { const p = JSON.parse(data.settings.wallpaper); w = { url: String(p.url || ''), file: String(p.file || '') }; } catch (e) {}
     if (w.file && c.env.KV && !(await c.env.KV.list({ prefix: w.file, limit: 1 })).keys.some(k => k.name === w.file)) w = { url: '', file: '' };
     await setWp(c, w);
+  }
+  // 页脚设置
+  if (data.settings && 'footer' in data.settings) {
+    let f = null;
+    try { f = cleanFooter(JSON.parse(data.settings.footer)); } catch (e) {}
+    if (f && !f.error) await run(c, "INSERT INTO settings (key,value) VALUES ('footer',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(f));
   }
   return stats;
 }
