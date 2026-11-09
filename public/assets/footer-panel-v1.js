@@ -21,7 +21,7 @@ const CSS = `
 .ftp-bd{padding:8px 18px 14px}
 .ftp label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#666;margin:10px 0}
 .ftp input[type=text]{border:1px solid #d5d9e0;border-radius:6px;padding:7px 9px;font-size:14px;color:#222;background:#fff;width:100%;box-sizing:border-box}
-.ftp small{color:#888;font-size:12px}
+.ftp h4{margin:14px 0 0;font-size:15px;color:#2566d8;border-left:3px solid #2566d8;padding-left:8px}.ftp small{color:#888;font-size:12px}
 .ftp-pv{margin:12px 0 4px;padding:14px 10px;border-radius:8px;background:#222;color:#fff;text-align:center;font-size:14px;white-space:pre-wrap;word-break:break-all}
 .ftp-pv a{color:#fff;text-decoration:underline}
 .ftp-msg{margin:8px 0;padding:8px 10px;border-radius:6px;font-size:13px;word-break:break-all}.ftp-msg.ok{background:#e6f4ea}.ftp-msg.bad{background:#fce8e6}
@@ -41,6 +41,7 @@ export async function openFooter() {
     <div class="ftp-hd"><b>自定义页脚</b><button class="ftp-x" data-a="close" title="关闭">×</button></div>
     <div class="ftp-bd">
       <div id="ft-msg"></div>
+      <h4>首页页脚</h4>
       <label class="f">版权文字（链接前面的部分，可留空）
         <input type="text" id="ft-text" maxlength="200" placeholder="Copyright © 2026  |  ">
       </label>
@@ -52,6 +53,18 @@ export async function openFooter() {
       </label>
       <small>预览：</small>
       <div class="ftp-pv" id="ft-pv"></div>
+      <h4>后台页脚</h4>
+      <label class="f">版权文字（链接前面的部分，可留空）
+        <input type="text" id="ft-atext" maxlength="200" placeholder="Copyright © 2025 Nav-Item | ">
+      </label>
+      <label class="f">链接文字（留空则不显示链接）
+        <input type="text" id="ft-alink-text" maxlength="100" placeholder="Powered by eooce">
+      </label>
+      <label class="f">链接 URL（http:// 或 https:// 开头；留空则仅作普通文字）
+        <input type="text" id="ft-aurl" maxlength="500" placeholder="https://example.com/">
+      </label>
+      <small>预览：</small>
+      <div class="ftp-pv" id="ft-apv"></div>
     </div>
     <div class="ftp-ft">
       <button class="ftp-b o" data-a="reset">恢复默认</button>
@@ -63,15 +76,18 @@ export async function openFooter() {
   const $ = id => mask.querySelector('#' + id);
   const msg = (t, ok = true) => { const m = $('ft-msg'); m.innerHTML = ''; if (!t) return; const d = document.createElement('div'); d.className = 'ftp-msg ' + (ok ? 'ok' : 'bad'); d.textContent = t; m.appendChild(d); };
   const close = () => mask.remove();
-  const get = () => ({ text: $('ft-text').value, link_text: $('ft-link-text').value.trim(), url: $('ft-url').value.trim() });
-  const fill = f => { $('ft-text').value = f.text || ''; $('ft-link-text').value = f.link_text || ''; $('ft-url').value = f.url || ''; preview(); };
+  const get = () => ({ text: $('ft-text').value, link_text: $('ft-link-text').value.trim(), url: $('ft-url').value.trim(), admin_text: $('ft-atext').value, admin_link_text: $('ft-alink-text').value.trim(), admin_url: $('ft-aurl').value.trim() });
+  const fill = f => { $('ft-text').value = f.text || ''; $('ft-link-text').value = f.link_text || ''; $('ft-url').value = f.url || ''; $('ft-atext').value = f.admin_text || ''; $('ft-alink-text').value = f.admin_link_text || ''; $('ft-aurl').value = f.admin_url || ''; preview(); };
+  function render(pv, text, linkText, url) {
+    pv.textContent = text;
+    if (!linkText) return;
+    if (url && /^https?:\/\//i.test(url)) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = linkText; pv.appendChild(a); }
+    else pv.appendChild(document.createTextNode(linkText));
+  }
   function preview() {
-    const f = get(), pv = $('ft-pv');
-    pv.textContent = f.text;
-    if (f.link_text) {
-      if (f.url && /^https?:\/\//i.test(f.url)) { const a = document.createElement('a'); a.href = f.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = f.link_text; pv.appendChild(a); }
-      else pv.appendChild(document.createTextNode(f.link_text));
-    }
+    const f = get();
+    render($('ft-pv'), f.text, f.link_text, f.url);
+    render($('ft-apv'), f.admin_text, f.admin_link_text, f.admin_url);
   }
   const sync = f => { try { localStorage.setItem('nav-footer', JSON.stringify(f)); } catch (e) {} };
   async function guard(btn, fn) {
@@ -86,9 +102,9 @@ export async function openFooter() {
     const b = e.target.closest('[data-a]'); if (!b) return;
     const a = b.dataset.a;
     if (a === 'close') return close();
-    if (a === 'save') return guard(b, async () => { const f = await api('PUT', get()); sync(f); fill(f); msg('已保存，刷新首页即可看到新的页脚'); });
+    if (a === 'save') return guard(b, async () => { const f = await api('PUT', get()); sync(f); fill(f); msg('已保存，刷新页面即可看到新的页脚'); });
     if (a === 'reset') return guard(b, async () => {
-      if (!confirm('确定恢复为默认页脚吗？')) return;
+      if (!confirm('确定将首页和后台页脚都恢复为默认吗？')) return;
       const f = await api('DELETE'); sync(f); fill(f); msg('已恢复默认');
     });
   });

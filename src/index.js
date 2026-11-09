@@ -350,14 +350,14 @@ app.delete('/api/wallpaper', auth, async c => {
 });
 
 // ---------- 页脚版权（文字 + 链接，可在后台自定义） ----------
-const FOOTER_DEFAULT = { text: 'Copyright © 2026  |   ', link_text: '龍哥博客', url: 'https://bk0.at8.ccwu.cc/' };
+const FOOTER_DEFAULT = { text: 'Copyright © 2026  |   ', link_text: '龍哥博客', url: 'https://bk0.at8.ccwu.cc/', admin_text: 'Copyright © 2025 Nav-Item | ', admin_link_text: 'Powered by eooce', admin_url: 'https://github.com/eooce/Nav-Item' };
+const badUrl = u => u && (!/^https?:\/\//i.test(u) || u.length > 500 || /[\s"'<>\\]/.test(u));
 const cleanFooter = v => {
   v = v && typeof v === 'object' ? v : {};
-  const text = String(v.text == null ? '' : v.text).slice(0, 200);
-  const link_text = String(v.link_text == null ? '' : v.link_text).trim().slice(0, 100);
-  const url = String(v.url == null ? '' : v.url).trim();
-  if (url && (!/^https?:\/\//i.test(url) || url.length > 500 || /[\s"'<>\\]/.test(url))) return { error: '链接 URL 无效（需 http:// 或 https:// 开头，且不能含空格、引号、尖括号）' };
-  return { text, link_text, url };
+  const pick = (k, max, trim) => { let x = v[k] == null ? (k.startsWith('admin_') ? FOOTER_DEFAULT[k] : '') : String(v[k]); if (trim) x = x.trim(); return x.slice(0, max); };
+  const out = { text: pick('text', 200), link_text: pick('link_text', 100, 1), url: pick('url', 600, 1), admin_text: pick('admin_text', 200), admin_link_text: pick('admin_link_text', 100, 1), admin_url: pick('admin_url', 600, 1) };
+  if (badUrl(out.url) || badUrl(out.admin_url)) return { error: '链接 URL 无效（需 http:// 或 https:// 开头，不超过 500 字，且不能含空格、引号、尖括号）' };
+  return out;
 };
 async function getFooter(c) {
   try { const r = await first(c, "SELECT value FROM settings WHERE key='footer'"); if (r && r.value) { const f = cleanFooter(JSON.parse(r.value)); if (!f.error) return f; } } catch (e) {}
